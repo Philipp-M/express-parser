@@ -256,19 +256,19 @@ pub enum Token<'src> {
     // TODO think about directly assigning the value
 
     // unfortunately something like "[0-9abcdef]{8}" is not supported (yet)
-    #[regex(r"%[0-1]+")]
-    BINARY_LITERAL(&'src str),
-    #[regex(r"[0-9]+")]
-    INTEGER_LITERAL(&'src str),
-    #[regex(r"[0-9]+\.[0-9]*([eE][+-]?[0-9]+)?")]
-    FLOAT_LITERAL(&'src str),
+    #[regex(r"%[0-1]+", |lex| usize::from_str_radix(&lex.slice()[1..], 2).ok())]
+    BINARY_LITERAL(usize),
+    #[regex(r"[0-9]+", |lex| lex.slice().parse().ok())]
+    INTEGER_LITERAL(f64),
+    #[regex(r"[0-9]+\.[0-9]*([eE][+-]?[0-9]+)?", |lex| lex.slice().parse().ok())]
+    FLOAT_LITERAL(f64),
     // TODO test this thoroughly, it isn't exactly what the BNF says, but stepcode does the same...
     // probably adjust this at some point to represent the real BNF
-    #[regex(r"'([^'\n]|'')*'")]
-    SIMPLE_STRING_LITERAL,
+    #[regex(r"'([^'\n]|'')*'", |lex| Some(&lex.slice()[1..(lex.slice().len()-1)]))]
+    SIMPLE_STRING_LITERAL(&'src str),
     // unfortunately something like "[0-9abcdef]{8}" is not supported (yet)
-    #[regex(r#""[0-9abcdef][0-9abcdef][0-9abcdef][0-9abcdef][0-9abcdef][0-9abcdef][0-9abcdef][0-9abcdef]""#)]
-    ENCODED_STRING_LITERAL,
+    #[regex(r#""[0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF]""#, |lex| Some(&lex.slice()[1..(lex.slice().len()-1)]))]
+    ENCODED_STRING_LITERAL(&'src str),
 
     #[regex(r"[a-zA-Z][a-zA-Z0-9_]*")]
     SIMPLE_ID(&'src str),
@@ -355,30 +355,33 @@ mod tests {
 
     #[test]
     fn parses_number_literals() {
-        assert_eq!(lex("12"), vec![INTEGER_LITERAL("12")]);
-        assert_eq!(lex("12."), vec![FLOAT_LITERAL("12.")]);
-        assert_eq!(lex("12.E8"), vec![FLOAT_LITERAL("12.E8")]);
-        assert_eq!(lex("34.E-8"), vec![FLOAT_LITERAL("34.E-8")]);
-        assert_eq!(lex("56.7"), vec![FLOAT_LITERAL("56.7")]);
-        assert_eq!(lex("89.1e+0"), vec![FLOAT_LITERAL("89.1e+0")]);
+        assert_eq!(lex("12"), vec![INTEGER_LITERAL(12.0)]);
+        assert_eq!(lex("12."), vec![FLOAT_LITERAL(12.0)]);
+        assert_eq!(lex("12.E8"), vec![FLOAT_LITERAL(12.0e8)]);
+        assert_eq!(lex("34.E-8"), vec![FLOAT_LITERAL(34.0E-8)]);
+        assert_eq!(lex("56.7"), vec![FLOAT_LITERAL(56.7)]);
+        assert_eq!(lex("89.1e+0"), vec![FLOAT_LITERAL(89.1e+0)]);
     }
 
     #[test]
     fn parses_string_literals() {
-        assert_eq!(lex("''"), vec![SIMPLE_STRING_LITERAL]);
-        assert_eq!(lex("''''"), vec![SIMPLE_STRING_LITERAL]);
+        assert_eq!(lex("''"), vec![SIMPLE_STRING_LITERAL("")]);
+        // TODO should this be ' instead of ''?
+        assert_eq!(lex("''''"), vec![SIMPLE_STRING_LITERAL("''")]);
+        assert_eq!(lex("'Hello World'"), vec![SIMPLE_STRING_LITERAL("Hello World")]);
         assert_eq!(lex("'''''"), vec![ERROR]);
         assert_eq!(lex("'\n'"), vec![ERROR, ERROR]);
         assert!(lex("\"12\"").contains(&ERROR));
-        assert_eq!(lex("\"12fa2a8f\""), vec![ENCODED_STRING_LITERAL]);
+        assert_eq!(lex("\"F09F9881\""), vec![ENCODED_STRING_LITERAL("F09F9881")]);
+        assert_eq!(lex("\"F09e9881\""), vec![ENCODED_STRING_LITERAL("F09e9881")]);
     }
 
     #[test]
     fn parses_binary_literals() {
-        assert_eq!(lex("%1"), vec![BINARY_LITERAL("%1")]);
-        assert_eq!(lex("%0"), vec![BINARY_LITERAL("%0")]);
-        assert_eq!(lex("%1111"), vec![BINARY_LITERAL("%1111")]);
-        assert_eq!(lex("%1101"), vec![BINARY_LITERAL("%1101")]);
+        assert_eq!(lex("%1"), vec![BINARY_LITERAL(1)]);
+        assert_eq!(lex("%0"), vec![BINARY_LITERAL(0)]);
+        assert_eq!(lex("%1111"), vec![BINARY_LITERAL(15)]);
+        assert_eq!(lex("%1101"), vec![BINARY_LITERAL(13)]);
         assert!(lex("%210").contains(&ERROR));
     }
 
