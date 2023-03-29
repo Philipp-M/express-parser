@@ -390,6 +390,7 @@ mod tests {
         assert_eq!(lex("i"), vec![SIMPLE_ID("i")]);
         assert_eq!(lex("hello123"), vec![SIMPLE_ID("hello123")]);
         assert_eq!(lex("hello_world12"), vec![SIMPLE_ID("hello_world12")]);
+        assert_eq!(lex("TrueNorth"), vec![SIMPLE_ID("TrueNorth")]);
     }
 
     #[test]
