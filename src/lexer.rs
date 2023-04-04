@@ -267,16 +267,16 @@ pub enum Token<'src> {
     #[regex(r"'([^'\n]|'')*'", |lex| Some(&lex.slice()[1..(lex.slice().len()-1)]))]
     SIMPLE_STRING_LITERAL(&'src str),
     // unfortunately something like "[0-9abcdef]{8}" is not supported (yet)
-    #[regex(r#""[0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF]""#, |lex| Some(&lex.slice()[1..(lex.slice().len()-1)]))]
+    #[regex(r#""([0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF]")+"#, |lex| Some(&lex.slice()[1..(lex.slice().len()-1)]))]
     ENCODED_STRING_LITERAL(&'src str),
 
     #[regex(r"[a-zA-Z][a-zA-Z0-9_]*")]
     SIMPLE_ID(&'src str),
 
-    #[token("(*")]
-    EMBEDDED_REMARK_START,
-    #[token("*)")]
-    EMBEDDED_REMARK_END,
+    #[regex(r"\(\*", parse_embedded_remark)]
+    EMBEDDED_REMARK(Remark<'src>),
+    #[regex("--", parse_tail_remark)]
+    TAIL_REMARK(Remark<'src>),
 
     // PUNCTUATION
     #[token(",")]
@@ -287,6 +287,10 @@ pub enum Token<'src> {
     SEMICOLON,
     #[token(":")]
     COLON,
+    #[token("?")]
+    WILD_CARD,
+    #[token("\\")]
+    BACKSLASH,
 
     // PARENTHESES/BRACKETS/BRACES
     #[token("(")]
@@ -307,6 +311,8 @@ pub enum Token<'src> {
     ASSIGNMENT,
     #[token("<")]
     LESS,
+    #[token("<*")]
+    AGGREGATION,
     #[token(">")]
     GREATER,
     #[token("<=")]
@@ -327,14 +333,96 @@ pub enum Token<'src> {
     MINUS,
     #[token("||")]
     DOUBLE_PIPE,
+    #[token("|")]
+    PIPE,
     #[token("*")]
     STAR,
     #[token("/")]
     SLASH,
 
     #[error]
-    #[regex(r"[ \t\n\f]+", logos::skip)]
+    #[regex(r"[ \t\r\n\f]+", logos::skip)]
     ERROR,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Remark<'a> {
+    tag: Option<&'a str>,
+    remark: &'a str,
+}
+
+fn parse_remark_tag<'a>(lexer: &mut logos::Lexer<'a, Token<'a>>) -> Option<&'a str> {
+    if lexer.remainder().chars().next() == Some('"') {
+        let remaining = lexer.remainder();
+        let mut in_simple_id = false;
+        let mut requires_simple_id = false;
+        for (i, c) in remaining[1..].chars().enumerate() {
+            match c {
+                '_' | 'a'..='z' | 'A'..='Z' | '0'..='9' if in_simple_id => continue,
+                'a'..='z' | 'A'..='Z' => {
+                    in_simple_id = true;
+                }
+                '.' => {
+                    requires_simple_id = true;
+                }
+                '"' => {
+                    if requires_simple_id || i == 0 {
+                        return None;
+                    } else {
+                        lexer.bump(i + 2); // includes quotes at the beginning
+                        return Some(&remaining[1..=i]);
+                    }
+                }
+                _ => return None,
+            }
+        }
+    }
+    None
+}
+
+// TODO are whitespaces allowed between the (* and the tag?
+fn parse_embedded_remark<'a>(lexer: &mut logos::Lexer<'a, Token<'a>>) -> Option<Remark<'a>> {
+    let mut embedded_remarks = 1;
+    let tag = parse_remark_tag(lexer);
+    let remainder = lexer.remainder();
+    let mut remark_length = 0;
+    loop {
+        match lexer.remainder().as_bytes() {
+            [b'*', b')', ..] => {
+                lexer.bump(2);
+                embedded_remarks -= 1;
+                if embedded_remarks == 0 {
+                    return Some(Remark { tag, remark: &remainder[..remark_length] });
+                }
+                remark_length += 2;
+            }
+            [b'(', b'*', ..] => {
+                lexer.bump(2);
+                embedded_remarks += 1;
+                remark_length += 2;
+            }
+            [] => return None,
+            _ => {
+                lexer.bump(1);
+                remark_length += 1;
+            }
+        }
+    }
+}
+
+// TODO are whitespaces allowed between the -- and the tag?
+fn parse_tail_remark<'a>(lexer: &mut logos::Lexer<'a, Token<'a>>) -> Option<Remark<'a>> {
+    let tag = parse_remark_tag(lexer);
+    let mut char_count = 0;
+    let remainder = lexer.remainder();
+    for c in remainder.chars() {
+        if matches!(c, '\n' | '\r') {
+            break;
+        }
+        char_count += 1;
+    }
+    lexer.bump(char_count);
+    return Some(Remark { tag, remark: &remainder[..char_count] });
 }
 
 pub fn lex(input: &str) -> Vec<Token> {
@@ -394,6 +482,52 @@ mod tests {
     }
 
     #[test]
+    fn parses_embedded_remarks() {
+        assert_eq!(lex("(**)"), vec![EMBEDDED_REMARK(Default::default())]);
+        assert_eq!(lex("(**) UNKNOWN"), vec![EMBEDDED_REMARK(Default::default()), UNKNOWN]);
+        assert_eq!(lex("(* remark *)"), vec![EMBEDDED_REMARK(Remark { tag: None, remark: " remark " })]);
+        assert_eq!(lex("(* remark *) TRUE"), vec![EMBEDDED_REMARK(Remark { tag: None, remark: " remark " }), TRUE]);
+        assert_eq!(
+            lex("(* embedded (* remark *) *)"),
+            vec![EMBEDDED_REMARK(Remark { tag: None, remark: " embedded (* remark *) " })]
+        );
+        assert_eq!(
+            lex("(* embedded (* remark *) another (* remark that embeds (* another remark *) *) *)"),
+            vec![EMBEDDED_REMARK(Remark {
+                tag: None,
+                remark: " embedded (* remark *) another (* remark that embeds (* another remark *) *) "
+            })]
+        );
+        assert_eq!(
+            lex(r#"(*"tag"*) UNKNOWN"#),
+            vec![EMBEDDED_REMARK(Remark { tag: Some("tag"), remark: "" }), UNKNOWN]
+        );
+    }
+
+    #[test]
+    fn parses_tail_remarks() {
+        assert_eq!(lex("-- remark"), vec![TAIL_REMARK(Remark { tag: None, remark: " remark" })]);
+        assert_eq!(
+            lex("--\"remark\" hello\n\r TRUE"),
+            vec![TAIL_REMARK(Remark { tag: Some("remark"), remark: " hello" }), TRUE]
+        );
+        assert_eq!(
+            lex("--\"remark\" hello\r\n TRUE"),
+            vec![TAIL_REMARK(Remark { tag: Some("remark"), remark: " hello" }), TRUE]
+        );
+        assert_eq!(
+            lex("--\"remark\" hello\n\n\n\r TRUE"),
+            vec![TAIL_REMARK(Remark { tag: Some("remark"), remark: " hello" }), TRUE]
+        );
+        assert_eq!(
+            lex("--\"remark\" hello\r\r\r\n\n TRUE"),
+            vec![TAIL_REMARK(Remark { tag: Some("remark"), remark: " hello" }), TRUE]
+        );
+        assert_eq!(lex("--"), vec![TAIL_REMARK(Remark { tag: None, remark: "" })]);
+        assert_eq!(lex("--\n\r"), vec![TAIL_REMARK(Remark { tag: None, remark: "" })]);
+    }
+
+    #[test]
     fn parses_operators() {
         assert_eq!(lex(":="), vec![ASSIGNMENT]);
         assert_eq!(lex("<"), vec![LESS]);
@@ -409,5 +543,13 @@ mod tests {
         assert_eq!(lex("||"), vec![DOUBLE_PIPE]);
         assert_eq!(lex("*"), vec![STAR]);
         assert_eq!(lex("/"), vec![SLASH]);
+    }
+
+    #[test]
+    fn parses_ifc_schema_without_errors() -> std::io::Result<()> {
+        let input = std::fs::read_to_string("./IFC.exp")?;
+        // eprintln!("{:#?}", Token::lexer(&input).collect::<Vec<_>>());
+        assert!(!Token::lexer(&input).any(|t| t == ERROR));
+        Ok(())
     }
 }
