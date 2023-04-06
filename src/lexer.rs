@@ -267,7 +267,7 @@ pub enum Token<'src> {
     #[regex(r"'([^'\n]|'')*'", |lex| Some(&lex.slice()[1..(lex.slice().len()-1)]))]
     SIMPLE_STRING_LITERAL(&'src str),
     // unfortunately something like "[0-9abcdef]{8}" is not supported (yet)
-    #[regex(r#""([0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF]")+"#, |lex| Some(&lex.slice()[1..(lex.slice().len()-1)]))]
+    #[regex(r#""([0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF][0-9abcdefABCDEF])+""#, |lex| Some(&lex.slice()[1..(lex.slice().len()-1)]))]
     ENCODED_STRING_LITERAL(&'src str),
 
     #[regex(r"[a-zA-Z][a-zA-Z0-9_]*")]
