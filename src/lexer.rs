@@ -337,6 +337,8 @@ pub enum Token<'src> {
     PIPE,
     #[token("*")]
     STAR,
+    #[token("**")]
+    DOUBLE_STAR,
     #[token("/")]
     SLASH,
 
@@ -542,6 +544,7 @@ mod tests {
         assert_eq!(lex("-"), vec![MINUS]);
         assert_eq!(lex("||"), vec![DOUBLE_PIPE]);
         assert_eq!(lex("*"), vec![STAR]);
+        assert_eq!(lex("**"), vec![DOUBLE_STAR]);
         assert_eq!(lex("/"), vec![SLASH]);
     }
 
