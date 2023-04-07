@@ -229,6 +229,12 @@ pub fn literal_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = Simp
     }))
 }
 
+macro_rules! qualifier {
+    ($name:ident) => {
+        
+    };
+}
+
 // TODO add param to only allow simple_expr
 // TODO unfortunately chumsky doesn't allow mutual recursion (simple_expr <-> expr)
 // I'm not sure anyway if in e.g. a numeric expression the normal (relational) expression is allowed to be called,
@@ -236,44 +242,27 @@ pub fn literal_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = Simp
 pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleSpan>>(
 ) -> impl Parser<'src, I, Expr, extra::Err<Rich<'src, Token<'src>>>> + Clone {
     recursive(|expr| {
-        let function_call_name = select! {
-            ABS => FunctionCallName::BuiltInFunction(BuiltInFunction::ABS),
-            ACOS => FunctionCallName::BuiltInFunction(BuiltInFunction::ACOS),
-            ASIN => FunctionCallName::BuiltInFunction(BuiltInFunction::ASIN),
-            ATAN => FunctionCallName::BuiltInFunction(BuiltInFunction::ATAN),
-            BLENGTH => FunctionCallName::BuiltInFunction(BuiltInFunction::BLENGTH),
-            COS => FunctionCallName::BuiltInFunction(BuiltInFunction::COS),
-            EXISTS => FunctionCallName::BuiltInFunction(BuiltInFunction::EXISTS),
-            EXP => FunctionCallName::BuiltInFunction(BuiltInFunction::EXP),
-            FORMAT => FunctionCallName::BuiltInFunction(BuiltInFunction::FORMAT),
-            HIBOUND => FunctionCallName::BuiltInFunction(BuiltInFunction::HIBOUND),
-            HIINDEX => FunctionCallName::BuiltInFunction(BuiltInFunction::HIINDEX),
-            LENGTH => FunctionCallName::BuiltInFunction(BuiltInFunction::LENGTH),
-            LOBOUND => FunctionCallName::BuiltInFunction(BuiltInFunction::LOBOUND),
-            LOINDEX => FunctionCallName::BuiltInFunction(BuiltInFunction::LOINDEX),
-            LOG => FunctionCallName::BuiltInFunction(BuiltInFunction::LOG),
-            LOG2 => FunctionCallName::BuiltInFunction(BuiltInFunction::LOG2),
-            LOG10 => FunctionCallName::BuiltInFunction(BuiltInFunction::LOG10),
-            NVL => FunctionCallName::BuiltInFunction(BuiltInFunction::NVL),
-            ODD => FunctionCallName::BuiltInFunction(BuiltInFunction::ODD),
-            ROLESOF => FunctionCallName::BuiltInFunction(BuiltInFunction::ROLESOF),
-            SIN => FunctionCallName::BuiltInFunction(BuiltInFunction::SIN),
-            SIZEOF => FunctionCallName::BuiltInFunction(BuiltInFunction::SIZEOF),
-            SQRT => FunctionCallName::BuiltInFunction(BuiltInFunction::SQRT),
-            TAN => FunctionCallName::BuiltInFunction(BuiltInFunction::TAN),
-            TYPEOF => FunctionCallName::BuiltInFunction(BuiltInFunction::TYPEOF),
-            USEDIN => FunctionCallName::BuiltInFunction(BuiltInFunction::USEDIN),
-            VALUE => FunctionCallName::BuiltInFunction(BuiltInFunction::VALUE),
-            VALUE_IN => FunctionCallName::BuiltInFunction(BuiltInFunction::VALUE_IN),
-            VALUE_UNIQUE => FunctionCallName::BuiltInFunction(BuiltInFunction::VALUE_UNIQUE),
-            SIMPLE_ID(fn_name) => FunctionCallName::Reference(fn_name.into()),
-        };
+        macro_rules! function_call_name {
+            (builtins: $($builtin_name:ident),+) => {
+                select! {
+                    $($builtin_name => FunctionCallName::BuiltInFunction(BuiltInFunction::$builtin_name)),+,
+                    SIMPLE_ID(fn_name) => FunctionCallName::Reference(fn_name.into()),
+                }
+            };
+        }
+        let function_call_name = function_call_name!(builtins: ABS, ACOS, ASIN, ATAN, BLENGTH, COS, EXISTS, EXP,
+                                                     FORMAT, HIBOUND, HIINDEX, LENGTH, LOBOUND, LOINDEX,
+                                                     LOG, LOG2, LOG10, NVL, ODD, ROLESOF, SIN, SIZEOF, SQRT,
+                                                     TAN, TYPEOF, USEDIN, VALUE, VALUE_IN, VALUE_UNIQUE);
+
+        let qualifier = just(DOT).ignore_then(select! { SIMPLE_ID(id) => Qualifier::Attribute(id.into()) }).repeated().collect();
         let actual_parameter_list =
             expr.clone().separated_by(just(COMMA)).collect().delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
         // TODO parameter list seems to be optional, this would makes parsing a little bit ambiguous (without parameters, it's just a Reference)
         let function_call = function_call_name
             .then(actual_parameter_list)
             .map(|(name, args)| QualifiableFactor::FunctionCall(FunctionCall { name, args }));
+        // let qualifier = qualifier!();
         let qualifiable_factor = function_call
             .or(select! {
                 SIMPLE_ID(id) => QualifiableFactor::Reference(id.into()),
@@ -281,9 +270,9 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
                 PI => QualifiableFactor::BuiltInConstant(BuiltInConstant::Pi),
                 SELF => QualifiableFactor::BuiltInConstant(BuiltInConstant::Self_),
                 WILD_CARD => QualifiableFactor::BuiltInConstant(BuiltInConstant::Indeterminate),
-            })
+            }).then(qualifier)
             // TODO qualifiers
-            .map(|qf| Expr::Qualifiable(Qualifiable { qualifiable_factor: qf, qualifiers: vec![] }));
+            .map(|(qf, q)| Expr::Qualifiable(Qualifiable { qualifiable_factor: qf, qualifiers: q }));
         let primary = literal_parser().map(Expr::Literal).or(qualifiable_factor);
 
         let paren_expr = expr.delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
@@ -329,6 +318,7 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
             .repeated(),
             |lhs, (op, rhs)| Expr::BinaryOperation(BinaryOperation { op, lhs: lhs.into(), rhs: rhs.into() }),
         );
+
         let rel_expr = simple_expr
             .clone()
             .then(select! {

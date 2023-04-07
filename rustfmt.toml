@@ -2,3 +2,4 @@ reorder_modules = false
 use_small_heuristics = "Max"
 max_width = 120
 format_macro_bodies = false
+skip_macro_invocations = [ "All" ]
