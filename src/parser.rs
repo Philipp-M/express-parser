@@ -249,11 +249,17 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
                                                      LOG, LOG2, LOG10, NVL, ODD, ROLESOF, SIN, SIZEOF, SQRT,
                                                      TAN, TYPEOF, USEDIN, VALUE, VALUE_IN, VALUE_UNIQUE);
 
-        let qualifier = just(DOT)
-            .ignore_then(select! { SIMPLE_ID(id) => Qualifier::Attribute(id.into()) })
-            .repeated()
-            .collect()
-            .boxed();
+        let attribute_qualifier = just(DOT).ignore_then(select! { SIMPLE_ID(id) => Qualifier::Attribute(id.into()) });
+        let group_qualifier = just(BACKSLASH).ignore_then(select! { SIMPLE_ID(id) => Qualifier::Group(id.into()) });
+        let index_qualifier = expr
+            .clone()
+            .then_ignore(just(COLON))
+            .then(expr.clone())
+            .map(|(begin, end)| Qualifier::Range { begin, end }) // [<expr>:<expr>]
+            .or(expr.clone().map(Qualifier::Index)) // [<expr>]
+            .delimited_by(just(OPEN_BRACKET), just(CLOSE_BRACKET));
+        let qualifier = attribute_qualifier.or(group_qualifier).or(index_qualifier).repeated().collect().boxed();
+
         let actual_parameter_list =
             expr.clone().separated_by(just(COMMA)).collect().delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
         // TODO parameter list seems to be optional, this would makes parsing a little bit ambiguous (without parameters, it's just a Reference)
@@ -487,5 +493,10 @@ mod tests {
             "12 in 42 * 42 ** 2 + 3",
             expr! {((r 12.0) in (((r 42.0) * ((r 42.0)(**)(r 2.0))) + (r 3.0)))}
         );
+    }
+
+    #[test]
+    fn parses_qualifiers() {
+        parse_eq!(expr_parser(), "[12.9:?]", expr! {(r 12.9)});
     }
 }
