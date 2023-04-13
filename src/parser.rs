@@ -229,12 +229,6 @@ pub fn literal_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = Simp
     }))
 }
 
-macro_rules! qualifier {
-    ($name:ident) => {
-        
-    };
-}
-
 // TODO add param to only allow simple_expr
 // TODO unfortunately chumsky doesn't allow mutual recursion (simple_expr <-> expr)
 // I'm not sure anyway if in e.g. a numeric expression the normal (relational) expression is allowed to be called,
@@ -255,7 +249,11 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
                                                      LOG, LOG2, LOG10, NVL, ODD, ROLESOF, SIN, SIZEOF, SQRT,
                                                      TAN, TYPEOF, USEDIN, VALUE, VALUE_IN, VALUE_UNIQUE);
 
-        let qualifier = just(DOT).ignore_then(select! { SIMPLE_ID(id) => Qualifier::Attribute(id.into()) }).repeated().collect();
+        let qualifier = just(DOT)
+            .ignore_then(select! { SIMPLE_ID(id) => Qualifier::Attribute(id.into()) })
+            .repeated()
+            .collect()
+            .boxed();
         let actual_parameter_list =
             expr.clone().separated_by(just(COMMA)).collect().delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
         // TODO parameter list seems to be optional, this would makes parsing a little bit ambiguous (without parameters, it's just a Reference)
@@ -270,10 +268,11 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
                 PI => QualifiableFactor::BuiltInConstant(BuiltInConstant::Pi),
                 SELF => QualifiableFactor::BuiltInConstant(BuiltInConstant::Self_),
                 WILD_CARD => QualifiableFactor::BuiltInConstant(BuiltInConstant::Indeterminate),
-            }).then(qualifier)
+            })
+            .then(qualifier)
             // TODO qualifiers
             .map(|(qf, q)| Expr::Qualifiable(Qualifiable { qualifiable_factor: qf, qualifiers: q }));
-        let primary = literal_parser().map(Expr::Literal).or(qualifiable_factor);
+        let primary = literal_parser().map(Expr::Literal).or(qualifiable_factor).boxed();
 
         let paren_expr = expr.delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
 
@@ -293,19 +292,22 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
             Expr::BinaryOperation(BinaryOperation { op: BinOp::Pow, lhs: lhs.into(), rhs: rhs.into() })
         });
 
-        let term = pow.clone().foldl(
-            select! {
-                STAR => BinOp::Mul,
-                SLASH => BinOp::RealDiv,
-                DIV => BinOp::IntegerDiv,
-                MOD => BinOp::Mod,
-                AND => BinOp::And,
-                DOUBLE_PIPE => BinOp::Or,
-            }
-            .then(pow)
-            .repeated(),
-            |lhs, (op, rhs)| Expr::BinaryOperation(BinaryOperation { op, lhs: lhs.into(), rhs: rhs.into() }),
-        );
+        let term = pow
+            .clone()
+            .foldl(
+                select! {
+                    STAR => BinOp::Mul,
+                    SLASH => BinOp::RealDiv,
+                    DIV => BinOp::IntegerDiv,
+                    MOD => BinOp::Mod,
+                    AND => BinOp::And,
+                    DOUBLE_PIPE => BinOp::Or,
+                }
+                .then(pow)
+                .repeated(),
+                |lhs, (op, rhs)| Expr::BinaryOperation(BinaryOperation { op, lhs: lhs.into(), rhs: rhs.into() }),
+            )
+            .boxed();
 
         let simple_expr = term.clone().foldl(
             select! {
