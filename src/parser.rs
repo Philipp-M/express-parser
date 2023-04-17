@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use chumsky::{
     input::{Stream, ValueInput},
     prelude::*,
@@ -7,11 +9,23 @@ use logos::Logos;
 use crate::lexer::Token::{self, *};
 
 // TODO include spans for better error reporting
-pub type Ast = Vec<SchemaDecl>;
+pub struct Ast(Vec<SchemaDecl>);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SchemaDecl {
     id: String,
+}
+
+impl Display for SchemaDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SCHEMA {}; END_SCHEMA", self.id)
+    }
+}
+
+impl Display for Ast {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.iter().try_for_each(|s| write!(f, "{s}\n"))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -19,6 +33,16 @@ pub enum Logical {
     True,
     False,
     Unknown,
+}
+
+impl Display for Logical {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Self::True => "TRUE",
+            Self::False => "FALSE",
+            Self::Unknown => "UNKNOWN",
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -31,6 +55,17 @@ pub enum Literal {
     String(String),
 }
 
+impl Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Literal::Binary(binary) => write!(f, "%{binary:b}"),
+            Literal::Logical(logical) => write!(f, "{logical}"),
+            Literal::Real(real) => write!(f, "{real}"),
+            Literal::String(s) => write!(f, "'{s}'"), // TODO encoded_string_literal?, this could produce incorrect code
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp {
     /// `+`
@@ -39,6 +74,15 @@ pub enum UnaryOp {
     Minus,
     /// `NOT`
     Not,
+}
+impl Display for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            UnaryOp::Plus => "+",
+            UnaryOp::Minus => "-",
+            UnaryOp::Not => "NOT",
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +139,34 @@ pub enum BinOp {
     Like,
 }
 
+impl Display for BinOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            BinOp::Mul => "*",
+            BinOp::RealDiv => "/",
+            BinOp::IntegerDiv => "DIV",
+            BinOp::Mod => "MOD",
+            BinOp::And => "AND",
+            BinOp::ComplexEntityInstanceConstruction => "||",
+            BinOp::Add => "+",
+            BinOp::Sub => "-",
+            BinOp::Or => "OR",
+            BinOp::Xor => "XOR",
+            BinOp::Pow => "**",
+            BinOp::Equal => "=",
+            BinOp::NotEqual => "<>",
+            BinOp::Less => "<",
+            BinOp::Greater => ">",
+            BinOp::LessEqual => "<=",
+            BinOp::GreaterEqual => ">=",
+            BinOp::InstanceEqual => ":=:",
+            BinOp::InstanceNotEqual => ":<>:",
+            BinOp::In => "IN",
+            BinOp::Like => "LIKE",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltInConstant {
     /// `CONST_E`, Napier's constant `e = 2.71828 …`
@@ -108,10 +180,15 @@ pub enum BuiltInConstant {
     Indeterminate,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum FunctionCallName {
-    BuiltInFunction(BuiltInFunction),
-    Reference(String),
+impl Display for BuiltInConstant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            BuiltInConstant::Napier => "CONST_E",
+            BuiltInConstant::Pi => "PI",
+            BuiltInConstant::Self_ => "SELF",
+            BuiltInConstant::Indeterminate => "?",
+        })
+    }
 }
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)] // to use original identifiers
@@ -148,10 +225,79 @@ pub enum BuiltInFunction {
     VALUE_UNIQUE,
 }
 
+impl Display for BuiltInFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            BuiltInFunction::ABS => "ABS",
+            BuiltInFunction::ACOS => "ACOS",
+            BuiltInFunction::ASIN => "ASIN",
+            BuiltInFunction::ATAN => "ATAN",
+            BuiltInFunction::BLENGTH => "BLENGTH",
+            BuiltInFunction::COS => "COS",
+            BuiltInFunction::EXISTS => "EXISTS",
+            BuiltInFunction::EXP => "EXP",
+            BuiltInFunction::FORMAT => "FORMAT",
+            BuiltInFunction::HIBOUND => "HIBOUND",
+            BuiltInFunction::HIINDEX => "HIINDEX",
+            BuiltInFunction::LENGTH => "LENGTH",
+            BuiltInFunction::LOBOUND => "LOBOUND",
+            BuiltInFunction::LOINDEX => "LOINDEX",
+            BuiltInFunction::LOG => "LOG",
+            BuiltInFunction::LOG2 => "LOG2",
+            BuiltInFunction::LOG10 => "LOG10",
+            BuiltInFunction::NVL => "NVL",
+            BuiltInFunction::ODD => "ODD",
+            BuiltInFunction::ROLESOF => "ROLESOF",
+            BuiltInFunction::SIN => "SIN",
+            BuiltInFunction::SIZEOF => "SIZEOF",
+            BuiltInFunction::SQRT => "SQRT",
+            BuiltInFunction::TAN => "TAN",
+            BuiltInFunction::TYPEOF => "TYPEOF",
+            BuiltInFunction::USEDIN => "USEDIN",
+            BuiltInFunction::VALUE => "VALUE",
+            BuiltInFunction::VALUE_IN => "VALUE_IN",
+            BuiltInFunction::VALUE_UNIQUE => "VALUE_UNIQUE",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FunctionCallName {
+    BuiltInFunction(BuiltInFunction),
+    Reference(String),
+}
+
+impl Display for FunctionCallName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FunctionCallName::BuiltInFunction(builtin) => write!(f, "{}", builtin),
+            FunctionCallName::Reference(r) => write!(f, "{}", r),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionCall {
     name: FunctionCallName,
     args: Vec<Expr>,
+}
+
+impl Display for FunctionCall {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)?;
+        if !self.args.is_empty() {
+            write!(f, "(")?;
+        }
+        let len = self.args.len();
+        for (i, arg) in self.args.iter().enumerate() {
+            if i == len - 1 {
+                write!(f, "{})", arg)?;
+            } else {
+                write!(f, "{}, ", arg)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Output of [qualifier]
@@ -167,6 +313,17 @@ pub enum Qualifier {
     Range { begin: Expr, end: Expr },
 }
 
+impl Display for Qualifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Qualifier::Attribute(id) => write!(f, ".{id}"),
+            Qualifier::Group(id) => write!(f, "\\{id}"),
+            Qualifier::Index(expr) => write!(f, "[{expr}]"),
+            Qualifier::Range { begin, end } => write!(f, "[{begin}:{end}]"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum QualifiableFactor {
     /// [attribute_ref], [general_ref], [population], or [constant_ref]
@@ -177,16 +334,41 @@ pub enum QualifiableFactor {
     FunctionCall(FunctionCall),
 }
 
+impl Display for QualifiableFactor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            QualifiableFactor::Reference(r) => write!(f, "{r}"),
+            QualifiableFactor::BuiltInConstant(c) => write!(f, "{c}"),
+            QualifiableFactor::FunctionCall(fc) => write!(f, "{fc}"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Qualifiable {
     qualifiable_factor: QualifiableFactor,
     qualifiers: Vec<Qualifier>,
 }
+
+impl Display for Qualifiable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.qualifiable_factor)?;
+        self.qualifiers.iter().try_for_each(|q| write!(f, "{q}"))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct BinaryOperation {
     op: BinOp,
     lhs: Box<Expr>,
     rhs: Box<Expr>,
+}
+
+impl Display for BinaryOperation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO maybe don't always use parenthised expressions
+        write!(f, "({} {} {})", self.lhs, self.op, self.rhs)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -195,12 +377,68 @@ pub struct UnaryOperation {
     rhs: Box<Expr>,
 }
 
+impl Display for UnaryOperation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO parenthises necessary anywhere?
+        write!(f, "{} {}", self.op, self.rhs)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AggregateInitializer {
+    elements: Vec<Element>,
+}
+
+impl Display for AggregateInitializer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        let len = self.elements.len();
+        for (i, arg) in self.elements.iter().enumerate() {
+            if i == len - 1 {
+                write!(f, "{}", arg)?;
+            } else {
+                write!(f, "{}, ", arg)?;
+            }
+        }
+        write!(f, "]")?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
     Qualifiable(Qualifiable),
     BinaryOperation(BinaryOperation),
     UnaryOperation(UnaryOperation),
+    AggregateInitializer(AggregateInitializer),
+}
+
+impl Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Literal(l) => write!(f, "{l}"),
+            Expr::Qualifiable(q) => write!(f, "{q}"),
+            Expr::BinaryOperation(b) => write!(f, "{b}"),
+            Expr::UnaryOperation(u) => write!(f, "{u}"),
+            Expr::AggregateInitializer(a) => write!(f, "{a}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Element {
+    pub expr: Expr,
+    pub repetition: Option<Expr>,
+}
+
+impl Display for Element {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.repetition {
+            Some(rep) => write!(f, "{}:{}", self.expr, rep),
+            None => write!(f, "{}", self.expr),
+        }
+    }
 }
 
 // pub struct QualifiableFactor {}
@@ -231,8 +469,9 @@ pub fn literal_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = Simp
 
 // TODO add param to only allow simple_expr
 // TODO unfortunately chumsky doesn't allow mutual recursion (simple_expr <-> expr)
-// I'm not sure anyway if in e.g. a numeric expression the normal (relational) expression is allowed to be called,
+// I'm not sure anyway if in e.g. a numeric expression the normal (relational) expression is allowed to be called (although the BNF defines it),
 // in case only simple_expr is allowed, this could be solved with an extra parameter for this function that disables relational operators
+// This could and likely will also be solved by validation either directly in the parser (.validate(..)) or in a later step
 pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleSpan>>(
 ) -> impl Parser<'src, I, Expr, extra::Err<Rich<'src, Token<'src>>>> + Clone {
     recursive(|expr| {
@@ -258,15 +497,15 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
             .map(|(begin, end)| Qualifier::Range { begin, end }) // [<expr>:<expr>]
             .or(expr.clone().map(Qualifier::Index)) // [<expr>]
             .delimited_by(just(OPEN_BRACKET), just(CLOSE_BRACKET));
-        let qualifier = attribute_qualifier.or(group_qualifier).or(index_qualifier).repeated().collect().boxed();
+        let qualifiers = attribute_qualifier.or(group_qualifier).or(index_qualifier).repeated().collect().boxed();
 
         let actual_parameter_list =
             expr.clone().separated_by(just(COMMA)).collect().delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
-        // TODO parameter list seems to be optional, this would makes parsing a little bit ambiguous (without parameters, it's just a Reference)
+        // TODO parameter list seems to be optional, this would make parsing a little bit ambiguous (without parameters, it's just a Reference)
         let function_call = function_call_name
             .then(actual_parameter_list)
             .map(|(name, args)| QualifiableFactor::FunctionCall(FunctionCall { name, args }));
-        // let qualifier = qualifier!();
+
         let qualifiable_factor = function_call
             .or(select! {
                 SIMPLE_ID(id) => QualifiableFactor::Reference(id.into()),
@@ -275,9 +514,20 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
                 SELF => QualifiableFactor::BuiltInConstant(BuiltInConstant::Self_),
                 WILD_CARD => QualifiableFactor::BuiltInConstant(BuiltInConstant::Indeterminate),
             })
-            .then(qualifier)
-            // TODO qualifiers
-            .map(|(qf, q)| Expr::Qualifiable(Qualifiable { qualifiable_factor: qf, qualifiers: q }));
+            .then(qualifiers)
+            .map(|(qualifiable_factor, qualifiers)| Expr::Qualifiable(Qualifiable { qualifiable_factor, qualifiers }));
+
+        let element = expr
+            .clone()
+            .then(just(COLON).ignore_then(expr.clone()).or_not())
+            .map(|(expr, repetition)| Element { expr, repetition });
+        // TODO at least one element?
+        let aggregate_initializer = element
+            .separated_by(just(COMMA))
+            .collect()
+            .delimited_by(just(OPEN_BRACKET), just(CLOSE_BRACKET))
+            .map(|elements| Expr::AggregateInitializer(AggregateInitializer { elements }));
+
         let primary = literal_parser().map(Expr::Literal).or(qualifiable_factor).boxed();
 
         let paren_expr = expr.delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
@@ -291,7 +541,7 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
         .map(|(op, arg)| Expr::UnaryOperation(UnaryOperation { op, rhs: Box::new(arg) }));
 
         // simple_factor in bnf
-        let atom = unary_op.or(primary).or(paren_expr); // TODO aggregate_initializer | entity_constructor | enumeration_reference | interval | query_expression
+        let atom = aggregate_initializer.or(unary_op).or(paren_expr).or(primary); // TODO entity_constructor | enumeration_reference | interval | query_expression
 
         // factor in bnf
         let pow = atom.clone().then_ignore(just(DOUBLE_STAR)).repeated().foldr(atom.clone(), |lhs, rhs| {
@@ -356,6 +606,7 @@ pub fn parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleSpan>>
         .repeated()
         .at_least(1)
         .collect::<Vec<_>>()
+        .map(Ast)
 }
 
 pub fn parse(src: &str) -> Ast {
@@ -375,128 +626,69 @@ mod tests {
 
     macro_rules! parse {
         ($parser:expr, $src:expr) => {{
-            let token_iter = Token::lexer($src)
-                .spanned()
-                .map(|(tok, span)| (tok, span.into()));
-            let token_stream = Stream::from_iter(token_iter)
-                // Tell chumsky to split the (Token, SimpleSpan) stream into its parts so that it can handle the spans for us
-                // This involves giving chumsky an 'end of input' span: we just use a zero-width span at the end of the string
-                .spanned(($src.len()..$src.len()).into());
-
-            // Parse the token stream with our chumsky parser
-            $parser.parse(token_stream).into_result().unwrap()
+            let token_iter = Token::lexer($src).spanned().map(|(tok, span)| (tok, span.into()));
+            let token_stream = Stream::from_iter(token_iter).spanned(($src.len()..$src.len()).into());
+            $parser.parse(token_stream).into_result().expect("Failed parsing")
         }};
     }
 
-    macro_rules! parse_eq {
+    macro_rules! parses {
         ($parser:expr, $src:expr, $eq:expr) => {
-            assert_eq!(parse!($parser, $src), $eq)
+            assert_eq!(format!("{}", parse!($parser, $src)), $eq)
         };
-    }
-
-    macro_rules! unary_op {
-        (+) => { UnaryOp::Plus };
-        (-) => { UnaryOp::Minus };
-        (!) => { UnaryOp::Not };
-    }
-
-    macro_rules! unary_expr {
-        ($op:tt $rhs:tt) => {
-            Expr::UnaryOperation(UnaryOperation { op: unary_op!($op), rhs: Box::new(expr!{$rhs}) })
+        ($parser:expr, $src:expr) => {
+            assert_eq!(format!("{}", parse!($parser, $src)), $src)
         };
-    }
-
-    macro_rules! binary_op {
-        (+) => { BinOp::Add };
-        (-) => { BinOp::Sub };
-        (or) => { BinOp::Or };
-        (xor) => { BinOp::Xor };
-        (*) => { BinOp::Mul };
-        ((**)) => { BinOp::Pow };
-        (/) => { BinOp::RealDiv };
-        (div) => { BinOp::IntegerDiv };
-        (%) => { BinOp::Mod };
-        (and) => { BinOp::And };
-        ((||)) => { BinOp::ComplexEntityInstanceConstruction };
-        (=) => { BinOp::Equal };
-        (=) => { BinOp::Equal };
-        ((<>)) => { BinOp::NotEqual };
-        (<) => { BinOp::Less };
-        (>) => { BinOp::Greater };
-        ((<=)) => { BinOp::LessEqual };
-        ((>=)) => { BinOp::GreaterEqual };
-        ((:=:)) => { BinOp::InstanceEqual };
-        ((:<>:)) => { BinOp::InstanceNotEqual };
-        (in) => { BinOp::In };
-        (like) => { BinOp::Like };
-    }
-
-    macro_rules! binary_expr {
-        ($lhs:tt $op:tt $rhs:tt) => {
-            Expr::BinaryOperation(BinaryOperation { op: binary_op!($op), lhs: Box::new(expr!{$lhs}), rhs: Box::new(expr!{$rhs}) })
-        };
-    }
-
-    macro_rules! expr {
-        // literals
-        {(r $lit:literal)} => { Expr::Literal(Literal::Real($lit)) };
-        {(l $lit:ident)} => { Expr::Literal(Literal::Logical(Logical::$lit)) };
-        {(b $lit:literal)} => { Expr::Literal(Literal::Binary($lit)) };
-        // unary expr
-        {($op:tt $rhs:tt)} => { unary_expr!($op $rhs) };
-        // binary expr
-        {($lhs:tt $op:tt $rhs:tt)} => { binary_expr!($lhs $op $rhs) };
     }
 
     #[test]
     fn parses_simple_schema() {
-        parse_eq!(parser(), "SCHEMA simple; END_SCHEMA", vec![SchemaDecl { id: "simple".to_owned() }]);
+        parses!(parser(), "SCHEMA simple; END_SCHEMA\n");
     }
 
     #[test]
     fn parses_literals() {
-        parse_eq!(literal_parser(), "12.9", Literal::Real(12.9));
-        parse_eq!(literal_parser(), "12", Literal::Real(12.0));
-        parse_eq!(literal_parser(), "true", Literal::Logical(Logical::True));
-        parse_eq!(literal_parser(), "UNKNOWN", Literal::Logical(Logical::Unknown));
-        parse_eq!(literal_parser(), "'hello world'", Literal::String("hello world".into()));
-        parse_eq!(literal_parser(), "\"F09F9881\"", Literal::String("😁".into()));
-        parse_eq!(literal_parser(), "\"F09F9881F09F9881\"", Literal::String("😁😁".into()));
+        parses!(literal_parser(), "12.9");
+        parses!(literal_parser(), "12");
+        parses!(literal_parser(), "true", "TRUE");
+        parses!(literal_parser(), "UNKNOWN");
+        parses!(literal_parser(), "'hello world'");
+        // TODO This should be encoded back into an encoded string literal instead of an UTF8 string
+        parses!(literal_parser(), "\"F09F9881\"", "'😁'");
+        parses!(literal_parser(), "\"F09F9881F09F9881\"", "'😁😁'");
     }
 
     #[test]
     fn parses_literal_expressions() {
-        parse_eq!(expr_parser(), "12.9", expr! {(r 12.9)});
+        parses!(expr_parser(), "12.9");
     }
 
     #[test]
     fn parses_unary_operations() {
-        parse_eq!(expr_parser(), "-12.9", expr! {(-(r 12.9))});
-        parse_eq!(expr_parser(), "not True", expr! {(!(l True))});
+        parses!(expr_parser(), "- 12.9");
+        parses!(expr_parser(), "not True", "NOT TRUE");
     }
 
     #[test]
     fn parses_binary_operations() {
-        parse_eq!(expr_parser(), "42**2**3", expr! {((r 42.0)(**)((r 2.0)(**)(r 3.0)))});
-        parse_eq!(
-            expr_parser(),
-            "12 - 42 * 42 ** 2 + 3",
-            expr! {(((r 12.0) - ((r 42.0) * ((r 42.0)(**)(r 2.0)))) + (r 3.0))}
-        );
-        parse_eq!(
-            expr_parser(),
-            "12 or (42 * 42 ** 2 + 3)",
-            expr! {((r 12.0) or (((r 42.0) * ((r 42.0)(**)(r 2.0))) + (r 3.0)))}
-        );
-        parse_eq!(
-            expr_parser(),
-            "12 in 42 * 42 ** 2 + 3",
-            expr! {((r 12.0) in (((r 42.0) * ((r 42.0)(**)(r 2.0))) + (r 3.0)))}
-        );
+        parses!(expr_parser(), "42**2**3", "(42 ** (2 ** 3))");
+        parses!(expr_parser(), "12 - 42 * 42 ** 2 + 3", "((12 - (42 * (42 ** 2))) + 3)");
+        parses!(expr_parser(), "12 or (42 * 42 ** 2 + 3)", "(12 OR ((42 * (42 ** 2)) + 3))");
+        parses!(expr_parser(), "12 in 42 * 42 ** 2 + 3", "(12 IN ((42 * (42 ** 2)) + 3))");
+    }
+
+    #[test]
+    fn parses_aggregate_initializer() {
+        parses!(expr_parser(), "[12.9]");
+        parses!(expr_parser(), "[12.9:1]");
+        // parses!(expr_parser(), "[12.9:1,]"); // TODO allow this, not in BNF though?
+        parses!(expr_parser(), "[12.9:1, 12]");
+        parses!(expr_parser(), "[12.9:1, 122.9:1]");
     }
 
     #[test]
     fn parses_qualifiers() {
-        parse_eq!(expr_parser(), "[12.9:?]", expr! {(r 12.9)});
+        parses!(expr_parser(), "arr[12.9:?]");
+        parses!(expr_parser(), "arr[12.9:?].idx");
     }
 }

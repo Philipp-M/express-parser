@@ -354,7 +354,7 @@ pub struct Remark<'a> {
 }
 
 fn parse_remark_tag<'a>(lexer: &mut logos::Lexer<'a, Token<'a>>) -> Option<&'a str> {
-    if lexer.remainder().chars().next() == Some('"') {
+    if lexer.remainder().starts_with('"') {
         let remaining = lexer.remainder();
         let mut in_simple_id = false;
         let mut requires_simple_id = false;
@@ -424,7 +424,7 @@ fn parse_tail_remark<'a>(lexer: &mut logos::Lexer<'a, Token<'a>>) -> Option<Rema
         char_count += 1;
     }
     lexer.bump(char_count);
-    return Some(Remark { tag, remark: &remainder[..char_count] });
+    Some(Remark { tag, remark: &remainder[..char_count] })
 }
 
 pub fn lex(input: &str) -> Vec<Token> {
