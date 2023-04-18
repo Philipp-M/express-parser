@@ -405,6 +405,29 @@ impl Display for AggregateInitializer {
     }
 }
 
+// TODO see below, likely ambiguous parsing with function_call
+// TODO combine Display trait code with function_call
+#[derive(Debug, Clone, PartialEq)]
+pub struct EntityConstructor {
+    entity_ref: String,
+    args: Vec<Expr>,
+}
+
+impl Display for EntityConstructor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}(", self.entity_ref)?;
+        let len = self.args.len();
+        for (i, arg) in self.args.iter().enumerate() {
+            if i == len - 1 {
+                write!(f, "{}", arg)?;
+            } else {
+                write!(f, "{}, ", arg)?;
+            }
+        }
+        write!(f, ")")
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(Literal),
@@ -412,6 +435,7 @@ pub enum Expr {
     BinaryOperation(BinaryOperation),
     UnaryOperation(UnaryOperation),
     AggregateInitializer(AggregateInitializer),
+    EntityConstructor(EntityConstructor),
 }
 
 impl Display for Expr {
@@ -422,6 +446,7 @@ impl Display for Expr {
             Expr::BinaryOperation(b) => write!(f, "{b}"),
             Expr::UnaryOperation(u) => write!(f, "{u}"),
             Expr::AggregateInitializer(a) => write!(f, "{a}"),
+            Expr::EntityConstructor(e) => write!(f, "{e}"),
         }
     }
 }
@@ -521,16 +546,10 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
             .clone()
             .then(just(COLON).ignore_then(expr.clone()).or_not())
             .map(|(expr, repetition)| Element { expr, repetition });
-        // TODO at least one element?
-        let aggregate_initializer = element
-            .separated_by(just(COMMA))
-            .collect()
-            .delimited_by(just(OPEN_BRACKET), just(CLOSE_BRACKET))
-            .map(|elements| Expr::AggregateInitializer(AggregateInitializer { elements }));
 
         let primary = literal_parser().map(Expr::Literal).or(qualifiable_factor).boxed();
 
-        let paren_expr = expr.delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
+        let paren_expr = expr.clone().delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
 
         let unary_op = select! {
             PLUS => UnaryOp::Plus,
@@ -540,10 +559,25 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
         .then(primary.clone().or(paren_expr.clone()))
         .map(|(op, arg)| Expr::UnaryOperation(UnaryOperation { op, rhs: Box::new(arg) }));
 
-        // simple_factor in bnf
-        let atom = aggregate_initializer.or(unary_op).or(paren_expr).or(primary); // TODO entity_constructor | enumeration_reference | interval | query_expression
+        let actual_parameter_list =
+            expr.clone().separated_by(just(COMMA)).collect().delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
+        // TODO parameter list seems to be optional, this would make parsing a little bit ambiguous (without parameters, it's just a Reference)
+        let entity_constructor = select! { SIMPLE_ID(id) => id.to_string()}
+            .then(actual_parameter_list)
+            .map(|(entity_ref, args)| Expr::EntityConstructor(EntityConstructor { entity_ref, args }));
 
-        // factor in bnf
+        let aggregate_initializer = element
+            .separated_by(just(COMMA))
+            .collect()
+            .delimited_by(just(OPEN_BRACKET), just(CLOSE_BRACKET))
+            .map(|elements| Expr::AggregateInitializer(AggregateInitializer { elements }));
+
+        // simple_factor in BNF
+        // TODO BNF ambiguous? entity_constructor probably/likely clashes with function_call, does a semantic check later decide whether it's a function_call or an entity_constructor?
+        // If that's the case, the function call should probably grouped together with the entity_constructor as something like a "callable reference"
+        let atom = aggregate_initializer.or(entity_constructor).or(unary_op).or(paren_expr).or(primary); // TODO enumeration_reference | interval | query_expression
+
+        // factor in BNF
         let pow = atom.clone().then_ignore(just(DOUBLE_STAR)).repeated().foldr(atom.clone(), |lhs, rhs| {
             Expr::BinaryOperation(BinaryOperation { op: BinOp::Pow, lhs: lhs.into(), rhs: rhs.into() })
         });
@@ -632,6 +666,12 @@ mod tests {
         }};
     }
 
+    macro_rules! parse_eq {
+        ($parser:expr, $src:expr, $eq:expr) => {
+            assert_eq!(parse!($parser, $src), $eq)
+        };
+    }
+
     macro_rules! parses {
         ($parser:expr, $src:expr, $eq:expr) => {
             assert_eq!(format!("{}", parse!($parser, $src)), $eq)
@@ -684,6 +724,14 @@ mod tests {
         // parses!(expr_parser(), "[12.9:1,]"); // TODO allow this, not in BNF though?
         parses!(expr_parser(), "[12.9:1, 12]");
         parses!(expr_parser(), "[12.9:1, 122.9:1]");
+    }
+
+    #[test]
+    fn parses_entity_constructor() {
+        parses!(expr_parser(), "MyEntity()");
+        parse_eq!(expr_parser(), "MyEntity()", Expr::EntityConstructor(EntityConstructor { entity_ref: "MyEntity".to_string(), args: vec![] }));
+
+        parses!(expr_parser(), "IfcVectorDifference(V, XVec).Orientation");
     }
 
     #[test]
