@@ -4,12 +4,8 @@ use logos::Logos;
 #[derive(Logos, Clone, Debug, PartialEq)]
 pub enum Token<'src> {
     // KEYWORDS
-    #[regex(r"(?i)ABS")]
-    ABS,
     #[regex(r"(?i)ABSTRACT")]
     ABSTRACT,
-    #[regex(r"(?i)ACOS")]
-    ACOS,
     #[regex(r"(?i)AGGREGATE")]
     AGGREGATE,
     #[regex(r"(?i)ALIAS")]
@@ -22,10 +18,6 @@ pub enum Token<'src> {
     ARRAY,
     #[regex(r"(?i)AS")]
     AS,
-    #[regex(r"(?i)ASIN")]
-    ASIN,
-    #[regex(r"(?i)ATAN")]
-    ATAN,
     #[regex(r"(?i)BAG")]
     BAG,
     #[regex(r"(?i)BASED_ON")]
@@ -34,8 +26,6 @@ pub enum Token<'src> {
     BEGIN,
     #[regex(r"(?i)BINARY")]
     BINARY,
-    #[regex(r"(?i)BLENGTH")]
-    BLENGTH,
     #[regex(r"(?i)BOOLEAN")]
     BOOLEAN,
     #[regex(r"(?i)BY")]
@@ -46,8 +36,6 @@ pub enum Token<'src> {
     CONSTANT,
     #[regex(r"(?i)CONST_E")]
     CONST_E,
-    #[regex(r"(?i)COS")]
-    COS,
     #[regex(r"(?i)DERIVE")]
     DERIVE,
     #[regex(r"(?i)DIV")]
@@ -88,20 +76,14 @@ pub enum Token<'src> {
     ENUMERATION,
     #[regex(r"(?i)ESCAPE")]
     ESCAPE,
-    #[regex(r"(?i)EXISTS")]
-    EXISTS,
     #[regex(r"(?i)EXTENSIBLE")]
     EXTENSIBLE,
-    #[regex(r"(?i)EXP")]
-    EXP,
     #[regex(r"(?i)FALSE")]
     FALSE,
     #[regex(r"(?i)FIXED")]
     FIXED,
     #[regex(r"(?i)FOR")]
     FOR,
-    #[regex(r"(?i)FORMAT")]
-    FORMAT,
     #[regex(r"(?i)FROM")]
     FROM,
     #[regex(r"(?i)FUNCTION")]
@@ -110,10 +92,6 @@ pub enum Token<'src> {
     GENERIC,
     #[regex(r"(?i)GENERIC_ENTITY")]
     GENERIC_ENTITY,
-    #[regex(r"(?i)HIBOUND")]
-    HIBOUND,
-    #[regex(r"(?i)HIINDEX")]
-    HIINDEX,
     #[regex(r"(?i)IF")]
     IF,
     #[regex(r"(?i)IN")]
@@ -124,36 +102,20 @@ pub enum Token<'src> {
     INTEGER,
     #[regex(r"(?i)INVERSE")]
     INVERSE,
-    #[regex(r"(?i)LENGTH")]
-    LENGTH,
     #[regex(r"(?i)LIKE")]
     LIKE,
     #[regex(r"(?i)LIST")]
     LIST,
-    #[regex(r"(?i)LOBOUND")]
-    LOBOUND,
     #[regex(r"(?i)LOCAL")]
     LOCAL,
-    #[regex(r"(?i)LOG")]
-    LOG,
-    #[regex(r"(?i)LOG10")]
-    LOG10,
-    #[regex(r"(?i)LOG2")]
-    LOG2,
     #[regex(r"(?i)LOGICAL")]
     LOGICAL,
-    #[regex(r"(?i)LOINDEX")]
-    LOINDEX,
     #[regex(r"(?i)MOD")]
     MOD,
     #[regex(r"(?i)NOT")]
     NOT,
     #[regex(r"(?i)NUMBER")]
     NUMBER,
-    #[regex(r"(?i)NVL")]
-    NVL,
-    #[regex(r"(?i)ODD")]
-    ODD,
     #[regex(r"(?i)OF")]
     OF,
     #[regex(r"(?i)ONEOF")]
@@ -182,8 +144,6 @@ pub enum Token<'src> {
     REPEAT,
     #[regex(r"(?i)RETURN")]
     RETURN,
-    #[regex(r"(?i)ROLESOF")]
-    ROLESOF,
     #[regex(r"(?i)RULE")]
     RULE,
     #[regex(r"(?i)SCHEMA")]
@@ -194,14 +154,8 @@ pub enum Token<'src> {
     SELF,
     #[regex(r"(?i)SET")]
     SET,
-    #[regex(r"(?i)SIN")]
-    SIN,
-    #[regex(r"(?i)SIZEOF")]
-    SIZEOF,
     #[regex(r"(?i)SKIP")]
     SKIP,
-    #[regex(r"(?i)SQRT")]
-    SQRT,
     #[regex(r"(?i)STRING")]
     STRING,
     #[regex(r"(?i)SUBTYPE")]
@@ -210,8 +164,6 @@ pub enum Token<'src> {
     SUBTYPE_CONSTRAINT,
     #[regex(r"(?i)SUPERTYPE")]
     SUPERTYPE,
-    #[regex(r"(?i)TAN")]
-    TAN,
     #[regex(r"(?i)THEN")]
     THEN,
     #[regex(r"(?i)TO")]
@@ -222,8 +174,6 @@ pub enum Token<'src> {
     TRUE,
     #[regex(r"(?i)TYPE")]
     TYPE,
-    #[regex(r"(?i)TYPEOF")]
-    TYPEOF,
     #[regex(r"(?i)UNIQUE")]
     UNIQUE,
     #[regex(r"(?i)UNKNOWN")]
@@ -232,14 +182,6 @@ pub enum Token<'src> {
     UNTIL,
     #[regex(r"(?i)USE")]
     USE,
-    #[regex(r"(?i)USEDIN")]
-    USEDIN,
-    #[regex(r"(?i)VALUE")]
-    VALUE,
-    #[regex(r"(?i)VALUE_IN")]
-    VALUE_IN,
-    #[regex(r"(?i)VALUE_UNIQUE")]
-    VALUE_UNIQUE,
     #[regex(r"(?i)VAR")]
     VAR,
     #[regex(r"(?i)WHERE")]

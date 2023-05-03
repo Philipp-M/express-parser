@@ -191,115 +191,6 @@ impl Display for BuiltInConstant {
     }
 }
 
-#[allow(non_camel_case_types, clippy::upper_case_acronyms)] // to use original identifiers
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum BuiltInFunction {
-    ABS,
-    ACOS,
-    ASIN,
-    ATAN,
-    BLENGTH,
-    COS,
-    EXISTS,
-    EXP,
-    FORMAT,
-    HIBOUND,
-    HIINDEX,
-    LENGTH,
-    LOBOUND,
-    LOINDEX,
-    LOG,
-    LOG2,
-    LOG10,
-    NVL,
-    ODD,
-    ROLESOF,
-    SIN,
-    SIZEOF,
-    SQRT,
-    TAN,
-    TYPEOF,
-    USEDIN,
-    VALUE,
-    VALUE_IN,
-    VALUE_UNIQUE,
-}
-
-impl Display for BuiltInFunction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            BuiltInFunction::ABS => "ABS",
-            BuiltInFunction::ACOS => "ACOS",
-            BuiltInFunction::ASIN => "ASIN",
-            BuiltInFunction::ATAN => "ATAN",
-            BuiltInFunction::BLENGTH => "BLENGTH",
-            BuiltInFunction::COS => "COS",
-            BuiltInFunction::EXISTS => "EXISTS",
-            BuiltInFunction::EXP => "EXP",
-            BuiltInFunction::FORMAT => "FORMAT",
-            BuiltInFunction::HIBOUND => "HIBOUND",
-            BuiltInFunction::HIINDEX => "HIINDEX",
-            BuiltInFunction::LENGTH => "LENGTH",
-            BuiltInFunction::LOBOUND => "LOBOUND",
-            BuiltInFunction::LOINDEX => "LOINDEX",
-            BuiltInFunction::LOG => "LOG",
-            BuiltInFunction::LOG2 => "LOG2",
-            BuiltInFunction::LOG10 => "LOG10",
-            BuiltInFunction::NVL => "NVL",
-            BuiltInFunction::ODD => "ODD",
-            BuiltInFunction::ROLESOF => "ROLESOF",
-            BuiltInFunction::SIN => "SIN",
-            BuiltInFunction::SIZEOF => "SIZEOF",
-            BuiltInFunction::SQRT => "SQRT",
-            BuiltInFunction::TAN => "TAN",
-            BuiltInFunction::TYPEOF => "TYPEOF",
-            BuiltInFunction::USEDIN => "USEDIN",
-            BuiltInFunction::VALUE => "VALUE",
-            BuiltInFunction::VALUE_IN => "VALUE_IN",
-            BuiltInFunction::VALUE_UNIQUE => "VALUE_UNIQUE",
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum FunctionCallName {
-    BuiltInFunction(BuiltInFunction),
-    Reference(String),
-}
-
-impl Display for FunctionCallName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FunctionCallName::BuiltInFunction(builtin) => write!(f, "{}", builtin),
-            FunctionCallName::Reference(r) => write!(f, "{}", r),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct FunctionCall {
-    name: FunctionCallName,
-    args: Vec<Expr>,
-}
-
-impl Display for FunctionCall {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)?;
-        if !self.args.is_empty() {
-            write!(f, "(")?;
-        }
-        let len = self.args.len();
-        for (i, arg) in self.args.iter().enumerate() {
-            if i == len - 1 {
-                write!(f, "{})", arg)?;
-            } else {
-                write!(f, "{}, ", arg)?;
-            }
-        }
-        Ok(())
-    }
-}
-
 /// Output of [qualifier]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Qualifier {
@@ -325,13 +216,23 @@ impl Display for Qualifier {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Reference {
+    name: String,
+    args: Vec<Expr>, // if reference is a function call
+}
+
+impl Display for Reference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum QualifiableFactor {
-    /// [attribute_ref], [general_ref], [population], or [constant_ref]
-    Reference(String),
+    /// [function_call], [attribute_ref], [general_ref], [population], or [constant_ref]
+    Reference(Reference),
     /// [built_in_constant]
     BuiltInConstant(BuiltInConstant),
-    /// [function_call]
-    FunctionCall(FunctionCall),
 }
 
 impl Display for QualifiableFactor {
@@ -339,7 +240,6 @@ impl Display for QualifiableFactor {
         match self {
             QualifiableFactor::Reference(r) => write!(f, "{r}"),
             QualifiableFactor::BuiltInConstant(c) => write!(f, "{c}"),
-            QualifiableFactor::FunctionCall(fc) => write!(f, "{fc}"),
         }
     }
 }
@@ -494,25 +394,13 @@ pub fn literal_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = Simp
 
 // TODO add param to only allow simple_expr
 // TODO unfortunately chumsky doesn't allow mutual recursion (simple_expr <-> expr)
+// TODO handle references (e.g. entity_constructor, enumeration_reference or function_call) without ambiguity
 // I'm not sure anyway if in e.g. a numeric expression the normal (relational) expression is allowed to be called (although the BNF defines it),
 // in case only simple_expr is allowed, this could be solved with an extra parameter for this function that disables relational operators
 // This could and likely will also be solved by validation either directly in the parser (.validate(..)) or in a later step
 pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleSpan>>(
 ) -> impl Parser<'src, I, Expr, extra::Err<Rich<'src, Token<'src>>>> + Clone {
     recursive(|expr| {
-        macro_rules! function_call_name {
-            (builtins: $($builtin_name:ident),+) => {
-                select! {
-                    $($builtin_name => FunctionCallName::BuiltInFunction(BuiltInFunction::$builtin_name)),+,
-                    SIMPLE_ID(fn_name) => FunctionCallName::Reference(fn_name.into()),
-                }
-            };
-        }
-        let function_call_name = function_call_name!(builtins: ABS, ACOS, ASIN, ATAN, BLENGTH, COS, EXISTS, EXP,
-                                                     FORMAT, HIBOUND, HIINDEX, LENGTH, LOBOUND, LOINDEX,
-                                                     LOG, LOG2, LOG10, NVL, ODD, ROLESOF, SIN, SIZEOF, SQRT,
-                                                     TAN, TYPEOF, USEDIN, VALUE, VALUE_IN, VALUE_UNIQUE);
-
         let attribute_qualifier = just(DOT).ignore_then(select! { SIMPLE_ID(id) => Qualifier::Attribute(id.into()) });
         let group_qualifier = just(BACKSLASH).ignore_then(select! { SIMPLE_ID(id) => Qualifier::Group(id.into()) });
         let index_qualifier = expr
@@ -526,14 +414,15 @@ pub fn expr_parser<'src, I: ValueInput<'src, Token = Token<'src>, Span = SimpleS
 
         let actual_parameter_list =
             expr.clone().separated_by(just(COMMA)).collect().delimited_by(just(OPEN_PAREN), just(CLOSE_PAREN));
-        // TODO parameter list seems to be optional, this would make parsing a little bit ambiguous (without parameters, it's just a Reference)
-        let function_call = function_call_name
-            .then(actual_parameter_list)
-            .map(|(name, args)| QualifiableFactor::FunctionCall(FunctionCall { name, args }));
+        let reference = select! { SIMPLE_ID(name) => name }.then(actual_parameter_list.or_not()).map(|(name, args)| {
+            QualifiableFactor::Reference(Reference {
+                name: name.into(),
+                args: if let Some(args) = args { args } else { Vec::new() },
+            })
+        });
 
-        let qualifiable_factor = function_call
+        let qualifiable_factor = reference
             .or(select! {
-                SIMPLE_ID(id) => QualifiableFactor::Reference(id.into()),
                 CONST_E => QualifiableFactor::BuiltInConstant(BuiltInConstant::Napier),
                 PI => QualifiableFactor::BuiltInConstant(BuiltInConstant::Pi),
                 SELF => QualifiableFactor::BuiltInConstant(BuiltInConstant::Self_),
